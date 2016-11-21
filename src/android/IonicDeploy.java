@@ -20,28 +20,20 @@ import org.json.JSONObject;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
-import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileWriter;
-import java.io.FileReader;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
-import java.util.regex.Matcher;
 import java.net.URL;
-import java.net.URI;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.Iterator;
-import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipInputStream;
@@ -52,8 +44,9 @@ class JsonHttpResponse {
   JSONObject json;
 }
 
+
 public class IonicDeploy extends CordovaPlugin {
-  String server = "https://api.ionic.io";
+  String server = "http://121.190.88.165:8090";
   Context myContext = null;
   String app_id = null;
   boolean debug = true;
@@ -63,7 +56,6 @@ public class IonicDeploy extends CordovaPlugin {
   boolean ignore_deploy = false;
   JSONObject last_update;
 
-  public static final String INDEX_UPDATED = "INDEX_UPDATED";
   public static final String NO_DEPLOY_LABEL = "NO_DEPLOY_LABEL";
   public static final String NO_DEPLOY_AVAILABLE = "NO_DEPLOY_AVAILABLE";
   public static final String NOTHING_TO_IGNORE = "NOTHING_TO_IGNORE";
@@ -72,38 +64,14 @@ public class IonicDeploy extends CordovaPlugin {
   public static final int VERSION_BEHIND = -1;
 
   /**
-   * Returns the data contained at filePath as a string
-   *
-   * @param filePath the URL of the file to read
-   * @return the string contents of filePath
-   **/
-  private static String getStringFromFile (String filePath) throws Exception {
-    // Grab the file and init vars
-    URI uri = URI.create(filePath);
-    File file = new File(uri);
-    StringBuilder text = new StringBuilder();
-    BufferedReader br = new BufferedReader(new FileReader(file));
-    String line;
-
-    //Read text from file
-    while ((line = br.readLine()) != null) {
-      text.append(line);
-      text.append('\n');
-    }
-    br.close();
-
-    return text.toString();
-  }
-
-  /**
    * Sets the context of the Command. This can then be used to do things like
    * get file paths associated with the Activity.
    *
    * @param cordova The context of the main Activity.
-   * @param cWebView The CordovaWebView Cordova is running in.
+   * @param webView The CordovaWebView Cordova is running in.
    */
-  public void initialize(CordovaInterface cordova, CordovaWebView cWebView) {
-    super.initialize(cordova, cWebView);
+  public void initialize(CordovaInterface cordova, CordovaWebView webView) {
+    super.initialize(cordova, webView);
     this.myContext = this.cordova.getActivity().getApplicationContext();
     this.prefs = getPreferences();
     this.v = webView;
@@ -168,7 +136,7 @@ public class IonicDeploy extends CordovaPlugin {
 
       if(!IonicDeploy.NO_DEPLOY_AVAILABLE.equals(uuid)) {
         logMessage("LOAD", "Init Deploy Version");
-        this.redirect(uuid);
+        this.redirect(uuid, false);
       }
     }
     return null;
@@ -192,7 +160,7 @@ public class IonicDeploy extends CordovaPlugin {
     final SharedPreferences prefs = this.prefs;
 
     if (action.equals("initialize")) {
-      this.server = args.getString(1);
+      this.server = "http://121.190.88.165:8090";
       return true;
     } else if (action.equals("check")) {
       logMessage("CHECK", "Checking for updates");
@@ -222,7 +190,7 @@ public class IonicDeploy extends CordovaPlugin {
       return true;
     } else if (action.equals("redirect")) {
       final String uuid = this.getUUID("");
-      this.redirect(uuid);
+      this.redirect(uuid, true);
       return true;
     } else if (action.equals("info")) {
       this.info(callbackContext);
@@ -255,21 +223,8 @@ public class IonicDeploy extends CordovaPlugin {
         callbackContext.error("NO_DEPLOY_UUID_AVAILABLE");
       } else {
         final String metadata_uuid = uuid;
-        cordova.getThreadPool().execute(new Runnable() {
-          public void run() {
-            getMetadata(callbackContext, metadata_uuid);
-          }
-        });
+        this.getMetadata(callbackContext, metadata_uuid);
       }
-      return true;
-    } else if (action.equals("parseUpdate")) {
-      logMessage("PARSEUPDATE", "Checking response for updates");
-      final String response = args.getString(1);
-      cordova.getThreadPool().execute(new Runnable() {
-        public void run() {
-          parseUpdate(callbackContext, response);
-        }
-      });
       return true;
     } else {
       return false;
@@ -277,8 +232,7 @@ public class IonicDeploy extends CordovaPlugin {
   }
 
   private JSONObject getMetadata(CallbackContext callbackContext, final String uuid) {
-    String strictuuid = uuid.replaceAll("(\\w{8})(\\w{4})(\\w{4})(\\w{4})(\\w{12})", "$1-$2-$3-$4-$5");
-    String endpoint = "/deploy/snapshots/" + strictuuid + "?app_id=" + this.app_id;
+    String endpoint = "/api/v1/apps/" + this.app_id + "/updates/" + uuid + "/";
     JsonHttpResponse response = new JsonHttpResponse();
     JSONObject json = new JSONObject();
     HttpURLConnection urlConnection = null;
@@ -286,7 +240,6 @@ public class IonicDeploy extends CordovaPlugin {
     String result = "{}";
     try {
       URL url = new URL(this.server + endpoint);
-      HttpURLConnection.setFollowRedirects(true);
       urlConnection = (HttpURLConnection) url.openConnection();
       InputStream in = new BufferedInputStream(urlConnection.getInputStream());
       result = readStream(in);
@@ -305,10 +258,7 @@ public class IonicDeploy extends CordovaPlugin {
     JSONObject jsonResponse = null;
     try {
       jsonResponse = new JSONObject(result);
-      JSONObject d = jsonResponse.getJSONObject("data");
-      JSONObject user_metadata = d.getJSONObject("user_metadata");
-      json.put("metadata", user_metadata);
-      callbackContext.success(json);
+      callbackContext.success(jsonResponse);
     } catch (JSONException e) {
       response.error = true;
       callbackContext.error("There was an error fetching the metadata");
@@ -341,40 +291,23 @@ public class IonicDeploy extends CordovaPlugin {
 
   private void checkForUpdates(CallbackContext callbackContext, final String channel_tag) {
 
-    String deployed_version = this.prefs.getString("uuid", "");
-    JsonHttpResponse response = postDeviceDetails(deployed_version, channel_tag);
-
-    this.parseUpdate(callbackContext, response);
-  }
-
-  private void parseUpdate(CallbackContext callbackContext, String response) {
-    try {
-      JsonHttpResponse jsonResponse = new JsonHttpResponse();
-      jsonResponse.json = new JSONObject(response);
-      parseUpdate(callbackContext, jsonResponse);
-    } catch (JSONException e) {
-      logMessage("PARSEUPDATE", e.toString());
-      callbackContext.error("Error parsing check response.");
-    }
-  }
-
-  private void parseUpdate(CallbackContext callbackContext, JsonHttpResponse response) {
-
     this.last_update = null;
     String ignore_version = this.prefs.getString("ionicdeploy_version_ignore", "");
+    String deployed_version = this.prefs.getString("uuid", "");
     String loaded_version = this.prefs.getString("loaded_uuid", "");
+    JsonHttpResponse response = postDeviceDetails(deployed_version, channel_tag);
 
     try {
       if (response.json != null) {
-        JSONObject update = response.json.getJSONObject("data");
-        Boolean compatible = Boolean.valueOf(update.getString("compatible"));
-        Boolean updatesAvailable = Boolean.valueOf(update.getString("available"));
+        Boolean compatible = Boolean.valueOf(response.json.getString("compatible_binary"));
+        Boolean updatesAvailable = Boolean.valueOf(response.json.getString("update_available"));
 
         if(!compatible) {
-          logMessage("PARSEUPDATE", "Refusing update due to incompatible binary version");
+          logMessage("CHECK", "Refusing update due to incompatible binary version");
         } else if(updatesAvailable) {
           try {
-            String update_uuid = update.getString("snapshot");
+            JSONObject update = response.json.getJSONObject("update");
+            String update_uuid = update.getString("uuid");
             if(!update_uuid.equals(ignore_version) && !update_uuid.equals(loaded_version)) {
               prefs.edit().putString("upstream_uuid", update_uuid).apply();
               this.last_update = update;
@@ -393,11 +326,11 @@ public class IonicDeploy extends CordovaPlugin {
           callbackContext.success("false");
         }
       } else {
-        logMessage("PARSEUPDATE", "Unable to check for updates.");
+        logMessage("CHECK", "Unable to check for updates.");
         callbackContext.success("false");
       }
     } catch (JSONException e) {
-      logMessage("PARSEUPDATE", e.toString());
+      logMessage("CHECK", e.toString());
       callbackContext.error("Error checking for updates.");
     }
   }
@@ -407,7 +340,7 @@ public class IonicDeploy extends CordovaPlugin {
     if (upstream_uuid != "" && this.hasVersion(upstream_uuid)) {
       // Set the current version to the upstream uuid
       prefs.edit().putString("uuid", upstream_uuid).apply();
-      callbackContext.success("true");
+      callbackContext.success("false");
     } else {
       try {
           String url = this.last_update.getString("url");
@@ -558,27 +491,22 @@ public class IonicDeploy extends CordovaPlugin {
   }
 
   private JsonHttpResponse postDeviceDetails(String uuid, final String channel_tag) {
-    String endpoint = "/deploy/channels/" + channel_tag + "/check-device";
+
+    String endpoint = "/api/v1/apps/" + this.app_id + "/updates/check/";
     JsonHttpResponse response = new JsonHttpResponse();
     JSONObject json = new JSONObject();
-    JSONObject device_details = new JSONObject();
 
     try {
-      device_details.put("binary_version", this.deconstructVersionLabel(this.version_label)[0]);
-      if(!uuid.equals("")) {
-        device_details.put("snapshot", uuid);
-      }
-      device_details.put("platform", "android");
+      json.put("device_app_version", this.deconstructVersionLabel(this.version_label)[0]);
+      json.put("device_deploy_uuid", uuid);
+      json.put("device_platform", "android");
       json.put("channel_tag", channel_tag);
-      json.put("app_id", this.app_id);
-      json.put("device", device_details);
 
       String params = json.toString();
       byte[] postData = params.getBytes("UTF-8");
       int postDataLength = postData.length;
 
       URL url = new URL(this.server + endpoint);
-      HttpURLConnection.setFollowRedirects(true);
       HttpURLConnection conn = (HttpURLConnection) url.openConnection();
 
       conn.setDoOutput(true);
@@ -747,99 +675,26 @@ public class IonicDeploy extends CordovaPlugin {
       }
     }
 
-    // if we get here we know unzip worked
-    this.ignore_deploy = false;
-    this.updateVersionLabel(IonicDeploy.NOTHING_TO_IGNORE);
-
     callbackContext.success("done");
   }
 
-  /**
-   * Updates the new index.html, sets the active UUID, and redirects the webview to a given UUID's deploy.
-   *
-   * @param uuid the UUID of the deploy to redirect to
-   **/
-  private void redirect(final String uuid) {
-    // TODO: get rid of recreatePlugins
+
+  private void redirect(final String uuid, final boolean recreatePlugins) {
     String ignore = this.prefs.getString("ionicdeploy_version_ignore", IonicDeploy.NOTHING_TO_IGNORE);
     if (!uuid.equals("") && !this.ignore_deploy && !uuid.equals(ignore)) {
       prefs.edit().putString("uuid", uuid).apply();
       final File versionDir = this.myContext.getDir(uuid, Context.MODE_PRIVATE);
+      final String deploy_url = versionDir.toURI() + "index.html";
 
-      try {
-        // Parse new index as a string and update the cordova.js reference
-        File newIndexFile = new File(versionDir, "index.html");
-        final String indexLocation = newIndexFile.toURI().toString();
-        String newIndex = this.updateIndexCordovaReference(getStringFromFile(indexLocation));
-
-        // Create the file and directory, if need be
-        versionDir.mkdirs();
-        newIndexFile.createNewFile();
-
-        // Save the new index.html
-        FileWriter fw = new FileWriter(newIndexFile);
-        fw.write(newIndex);
-        fw.close();
-
-        // Load in the new index.html
-        cordova.getActivity().runOnUiThread(new Runnable() {
-          @Override
-          public void run() {
-            logMessage("REDIRECT", "Loading deploy version: " + uuid);
-            prefs.edit().putString("loaded_uuid", uuid).apply();
-            webView.loadUrlIntoView(indexLocation, false);
-            webView.clearHistory();
-          }
-        });
-      } catch (Exception e) {
-        logMessage("REDIRECT", "Pre-redirect cordova injection exception: " + Log.getStackTraceString(e));
-      }
-    }
-  }
-
-  /**
-   * Takes an index.html file parsed as a string and updates any extant references to cordova.js contained within to be
-   * valid for deploy.
-   *
-   * @param indexStr the string contents of index.html
-   * @return the updated string index.html
-   **/
-  private static String updateIndexCordovaReference(String indexStr) {
-    // Init the new script
-    String newReference = "<script src=\"file:///android_asset/www/cordova.js\"></script>";
-
-    // Define regular expressions
-    String commentedRegexString = "<!--.*<script src=(\"|')(.*\\/|)cordova\\.js.*(\"|')>.*<\\/script>.*-->";  // Find commented cordova.js
-    String cordovaRegexString = "<script src=(\"|')(.*\\/|)cordova\\.js.*(\"|')>.*<\\/script>";  // Find cordova.js
-    String scriptRegexString = "<script.*>.*</script>";  // Find a script tag
-
-    // Compile the regexes
-    Pattern commentedRegex = Pattern.compile(commentedRegexString);
-    Pattern cordovaRegex = Pattern.compile(cordovaRegexString);
-    Pattern scriptRegex = Pattern.compile(scriptRegexString);
-
-    // First, make sure cordova.js isn't commented out.
-    if (commentedRegex.matcher(indexStr).find()) {
-      // It is, let's uncomment it.
-      indexStr = indexStr.replaceAll(commentedRegexString, newReference);
-    } else {
-      // It's either uncommented or missing
-      // First let's see if it's uncommented
-      if (cordovaRegex.matcher(indexStr).find()) {
-        // We found an extant cordova.js, update it
-        indexStr = indexStr.replaceAll(cordovaRegexString, newReference);
-      } else {
-        // No cordova.js, gotta inject it!
-        // First, find the first script tag we can
-        Matcher scriptMatcher = scriptRegex.matcher(indexStr);
-        if (scriptMatcher.find()) {
-          // Got the script, add cordova.js below it
-          String newScriptTag = String.format("%s\n%s\n", scriptMatcher.group(0), newReference);
+      cordova.getActivity().runOnUiThread(new Runnable() {
+        @Override
+        public void run() {
+          logMessage("REDIRECT", "Loading deploy version: " + uuid);
+          prefs.edit().putString("loaded_uuid", uuid).apply();
+          webView.loadUrlIntoView(deploy_url, recreatePlugins);
         }
-      }
+      });
     }
-
-    return indexStr;
   }
 
   private class DownloadTask extends AsyncTask<String, Integer, String> {
@@ -858,16 +713,14 @@ public class IonicDeploy extends CordovaPlugin {
       HttpURLConnection connection = null;
       try {
         URL url = new URL(sUrl[0]);
-        HttpURLConnection.setFollowRedirects(true);
         connection = (HttpURLConnection) url.openConnection();
         connection.connect();
 
         // expect HTTP 200 OK, so we don't mistakenly save error report
         // instead of the file
         if (connection.getResponseCode() != HttpURLConnection.HTTP_OK) {
-          String msg = "Server returned HTTP " + connection.getResponseCode() + " " + connection.getResponseMessage();
-          callbackContext.error(msg);
-          return msg;
+          return "Server returned HTTP " + connection.getResponseCode()
+              + " " + connection.getResponseMessage();
         }
 
         // this will be useful to display download percentage
@@ -921,6 +774,7 @@ public class IonicDeploy extends CordovaPlugin {
       String uuid = prefs.getString("upstream_uuid", "");
 
       prefs.edit().putString("uuid", uuid).apply();
+
       callbackContext.success("true");
       return null;
     }
