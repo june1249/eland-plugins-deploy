@@ -533,8 +533,6 @@ public class IonicDeploy extends CordovaPlugin {
       response.error = true;
     } catch (IOException e) {
       response.error = true;
-    } catch (java.net.SocketTimeoutException e) {
-      response.error = true;
     }
 
     return response;
