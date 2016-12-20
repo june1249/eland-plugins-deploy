@@ -509,6 +509,8 @@ public class IonicDeploy extends CordovaPlugin {
       URL url = new URL(this.server + endpoint);
       HttpURLConnection conn = (HttpURLConnection) url.openConnection();
 
+      conn.setConnectTimeout(5000); //set timeout to 5 seconds
+
       conn.setDoOutput(true);
       conn.setRequestMethod("POST");
       conn.setRequestProperty("Content-Type", "application/json");
@@ -530,6 +532,8 @@ public class IonicDeploy extends CordovaPlugin {
     } catch (MalformedURLException e) {
       response.error = true;
     } catch (IOException e) {
+      response.error = true;
+    } catch (java.net.SocketTimeoutException e) {
       response.error = true;
     }
 
