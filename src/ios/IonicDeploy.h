@@ -22,8 +22,6 @@
 
 - (void) check:(CDVInvokedUrlCommand *)command;
 
-- (void) parseUpdate:(CDVInvokedUrlCommand *)command;
-
 - (void) download:(CDVInvokedUrlCommand *)command;
 
 - (void) extract:(CDVInvokedUrlCommand *)command;
