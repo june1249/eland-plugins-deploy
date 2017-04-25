@@ -105,7 +105,7 @@ typedef struct JsonHttpResponse {
 }
 
 - (void) initialize:(CDVInvokedUrlCommand *)command {
-    self.deploy_server = @"http://121.190.88.165:8090";
+    self.deploy_server = [command.arguments objectAtIndex:1];
 }
 
 - (void) check:(CDVInvokedUrlCommand *)command {
@@ -284,7 +284,7 @@ typedef struct JsonHttpResponse {
     if (uuid == nil || uuid == [NSNull null] || [uuid isEqualToString:@""] || [uuid isEqualToString:@"null"]) {
         pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"NO_DEPLOY_UUID_AVAILABLE"];
     } else {
-        NSString *baseUrl = @"http://121.190.88.165:8090";
+        NSString *baseUrl = self.deploy_server;
         NSString *endpoint = [NSString stringWithFormat:@"/api/v1/apps/%@/updates/%@/", self.appId, uuid];
         NSString *url = [NSString stringWithFormat:@"%@%@", baseUrl, endpoint];
         NSDictionary* headers = @{@"Content-Type": @"application/json", @"accept": @"application/json"};
@@ -349,7 +349,7 @@ typedef struct JsonHttpResponse {
 }
 
 - (struct JsonHttpResponse) postDeviceDetails {
-    NSString *baseUrl = @"http://121.190.88.165:8090";
+    NSString *baseUrl = self.deploy_server;
     NSString *endpoint = [NSString stringWithFormat:@"/api/v1/apps/%@/updates/check/", self.appId];
     NSString *url = [NSString stringWithFormat:@"%@%@", baseUrl, endpoint];
     NSDictionary* headers = @{@"Content-Type": @"application/json", @"accept": @"application/json"};
